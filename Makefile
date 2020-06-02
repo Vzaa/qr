@@ -1,7 +1,7 @@
 CC = cc
-CFLAGS = -std=c99 -pedantic -Wall
+CFLAGS = -Wall
 
-all: qr
+all: qrwpa
 
-qr: qr.c png_create.c png_utils.c
-	$(CC) $(CFLAGS) -o qr qr.c png_create.c png_utils.c
+qrwpa: qr.c qrwpa.c
+	$(CC) $(CFLAGS) -o qrwpa qr.c qrwpa.c

@@ -1,3 +1,9 @@
+# qrwpa
+
+Added a simple WiFi QR Code generator that uses bjguillot's qr implementation.
+
+![](res/qrwpa.png)
+
 # qr
 Simple QR Code Generator written in C without any third-party library dependencies.
 
