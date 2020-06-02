@@ -116,6 +116,16 @@ int is_mask_applicable(int16_t row, int16_t column, unsigned char mask_number) {
 	return 0;
 }
 
+void img_set(unsigned char *img, int w, int y, int x, unsigned char val)
+{
+	img[w * y + x] = val;
+}
+
+unsigned char img_get(unsigned char *img, int w, int y, int x)
+{
+	return img[w * y + x];
+}
+
 void parseMessage(char* filename, const char* freetext, unsigned char test_vector[]) {
 
 	unsigned char message[1666] = {0};  // 244 valid up to VERSION 13-Q, 1666 valid up to VERSION 40-Q
@@ -233,48 +243,41 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	int16_t max_pixels = (qr_version*4)+21;
 	printf("INFO: pixel size=%d x %d\n", max_pixels, max_pixels);
 
-        unsigned char **image = malloc(max_pixels * sizeof(unsigned char*)); //rows
-        if (image == 0) {
-                printf("\a!!! ERROR !!! Out of memory during first malloc\n");
-                return;
-        }
-        for (int i=0; i < max_pixels; i++) {
-                image[i] = malloc(max_pixels); //columns
-                if (image[i] == 0) {
-                        printf("\a!!! ERROR !!! Out of memory during second malloc\n");
-                        return;
-                }
-        }
+	unsigned char *image = malloc(max_pixels * max_pixels); //rows
+	if (image == 0) {
+		printf("\a!!! ERROR !!! Out of memory during first malloc\n");
+		return;
+	}
 
-	for (int16_t i=0; i < max_pixels; i++) {
-		for (int16_t j=0; j < max_pixels; j++) {
-			image[i][j] = 255; // set all pixels to white
+	for (int16_t i = 0; i < max_pixels; i++) {
+		for (int16_t j = 0; j < max_pixels; j++) {
+			img_set(image, max_pixels, i, j, 255); // set all pixels to white
 		}
 	}
 
 	// add the three finder pattern modules to the qr code
 	int16_t finder_pattern = (qr_version*4)+14;
 	for (int16_t i = 0; i < 7; i++) {
-		image[0][i] = 0; //top left module
-		image[6][i] = 0;
-		image[0][finder_pattern+i] = 0; //top right module
-		image[6][finder_pattern+i] = 0;
-		image[finder_pattern][i] = 0; //bottom left module
-		image[max_pixels-1][i] = 0;
+		img_set(image, max_pixels, 0, i, 0); //top left module
+		img_set(image, max_pixels, 6, i, 0);
+		img_set(image, max_pixels, 0, finder_pattern + i, 0); //top right module
+		img_set(image, max_pixels, 6, finder_pattern + i, 0);
+		img_set(image, max_pixels, finder_pattern, i, 0); //bottom left module
+		img_set(image, max_pixels, max_pixels - 1, i, 0);
 	}
 	for (int16_t i = 1; i < 6; i++) {
-		image[i][0] = 0; //top left module
-		image[i][6] = 0;
-		image[i][finder_pattern] = 0; //top right module
-		image[i][max_pixels-1] = 0;
-		image[finder_pattern+i][0] = 0; //bottom left module
-		image[finder_pattern+i][6] = 0;
+		img_set(image, max_pixels, i, 0, 0); //top left module
+		img_set(image, max_pixels, i, 6, 0);
+		img_set(image, max_pixels, i, finder_pattern, 0); //top right module
+		img_set(image, max_pixels, i, max_pixels - 1, 0);
+		img_set(image, max_pixels, finder_pattern + i, 0, 0); //bottom left module
+		img_set(image, max_pixels, finder_pattern + i, 6, 0);
 	}
 	for (int16_t i = 2; i < 5; i++) {
 		for (int16_t j = 0; j < 3; j++) {
-			image[2+j][i] = 0;
-			image[2+j][i+finder_pattern] = 0;
-			image[finder_pattern+2+j][i] = 0;
+			img_set(image, max_pixels, 2 + j, i, 0);
+			img_set(image, max_pixels, 2 + j, i + finder_pattern, 0);
+			img_set(image, max_pixels, finder_pattern + 2 + j, i, 0);
 		}
 	}
 
@@ -289,15 +292,21 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			for (int16_t j=0; j < 7; j++) {
 				if ((center[i] != 0) && (center[j] != 0)) {
 					//printf("coord=(%d,%d)\n", center[i], center[j]);
-					if (image[center[i]][center[j]] == 255) { //only add if bit is currently white
-						image[center[i]][center[j]] = 0;
-						for (int16_t k=0; k < 5; k++) {
-							image[center[i]-2][center[j]-2+k] = 0;
-							image[center[i]+2][center[j]-2+k] = 0;
+					if (img_get(image, max_pixels, center[i], center[j]) == 255) { //only add if bit is currently white
+						img_set(image, max_pixels, center[i], center[j], 0);
+						for (int16_t k = 0; k < 5; k++) {
+							img_set(image, max_pixels, center[i] - 2,
+								center[j] - 2 + k, 0);
+							img_set(image, max_pixels, center[i] + 2,
+								center[j] - 2 + k, 0);
 						}
-						for (int16_t k=0; k < 3; k++) {
-							image[center[i]-1+k][center[j]-2] = 0;
-							image[center[i]-1+k][center[j]+2] = 0;
+						for (int16_t k = 0; k < 3; k++) {
+							img_set(image, max_pixels,
+								center[i] - 1 + k, center[j] - 2,
+								0);
+							img_set(image, max_pixels,
+								center[i] - 1 + k, center[j] + 2,
+								0);
 						}
 					}
 				}
@@ -307,13 +316,13 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 
 	//adding timing patterns
-	for (int16_t i=8; i < max_pixels - 8; i+=2) {
-		image[6][i] = 0;
-		image[i][6] = 0;
+	for (int16_t i = 8; i < max_pixels - 8; i += 2) {
+		img_set(image, max_pixels, 6, i, 0);
+		img_set(image, max_pixels, i, 6, 0);
 	}
 
 	//add the "dark module"
-	image[(qr_version * 4)+13][8] = 0;
+	img_set(image, max_pixels, (qr_version * 4) + 13, 8, 0);
 
 	unsigned char mask_number = 1;
 	printf("INFO: using mask %d\n", mask_number);
@@ -325,8 +334,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		for (int16_t i=0; i < 8; i++) {
 			if (i == 6) skip=1;
 			if ((mask & 1) > 0) {
-				image[8][max_pixels-i-1] = 0;
-				image[i+skip][8] = 0;
+				img_set(image, max_pixels, 8, max_pixels - i - 1, 0);
+				img_set(image, max_pixels, i + skip, 8, 0);
 			}
 			mask = mask >> 1;
 		}
@@ -335,8 +344,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		for (int16_t i=0; i < 7; i++) {
 			if (i == 1) skip= -1;
 			if ((mask & 1) > 0) {
-				image[max_pixels-7+i][8] = 0;
-				image[8][7-i+skip] = 0;
+				img_set(image, max_pixels, max_pixels - 7 + i, 8, 0);
+				img_set(image, max_pixels, 8, 7 - i + skip, 0);
 			}
 			mask = mask >> 1;
 		}
@@ -350,8 +359,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			for (int j=0; j < 2; j++) {
 				for (int k=0; k < 3; k++) {
 					if ((ver & 1) > 0) {
-						image[0+j+(i*2)][max_pixels-11+k] = 0;
-						image[max_pixels-11+k][0+j+(i*2)] = 0;
+						img_set(image, max_pixels, 0 + j + (i * 2), max_pixels - 11 + k, 0);
+						img_set(image, max_pixels, max_pixels - 11 + k, 0 + j + (i * 2), 0);
 					}
 					ver = ver >> 1;
 				}
@@ -374,17 +383,18 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 	for (int i=0; i < primary_bits + remainder_bits; i++) {
 
-		if (image[y][x] == 0) { // check for alignment marker hit
-			if (image[y][x-1] == 0) //hit alignment marker head=-on, skip over it
+		if (img_get(image, max_pixels, y, x) == 0) { // check for alignment marker hit
+			if (img_get(image, max_pixels, y, x - 1) == 0) //hit alignment marker head=-on, skip over it
 				y = y + dir*5;
 			else {  // hit left-hand edge of alignment marker, handle special case
 				x = x - 1;
 				for (int j=0; j < 5; j++) {
 					if (y != 6) { //skip over horitzonal timing line
 						if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
-						if ((working_byte & 128) > 0) image[y][x] = 0;
-						if (is_mask_applicable(y, x, mask_number)) image[y][x]=~image[y][x];
-	
+						if ((working_byte & 128) > 0)
+							img_set(image, max_pixels, y, x, 0);
+						if (is_mask_applicable(y, x, mask_number))
+							img_set(image, max_pixels, y, x, ~img_get(image, max_pixels, y, x));
 						i++;
 					}
 					y = y + dir;
@@ -395,18 +405,22 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 		if (i < primary_bits) {
 			if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
-			if ((working_byte & 128) > 0) image[y][x] = 0;
+			if ((working_byte & 128) > 0)
+				img_set(image, max_pixels, y, x, 0);
 		}
-		if (is_mask_applicable(y, x, mask_number)) image[y][x]=~image[y][x]; // handle masking for primary or remainder bit
+		if (is_mask_applicable(y, x, mask_number))
+			img_set(image, max_pixels, y, x, ~img_get(image, max_pixels, y, x));
 
 		i++;
 		x = x - 1;
 
 		if (i < primary_bits) {
 			if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
-			if ((working_byte & 128) > 0) image[y][x] = 0;
+			if ((working_byte & 128) > 0)
+				img_set(image, max_pixels, y, x, 0);
 		}
-		if (is_mask_applicable(y, x, mask_number)) image[y][x]=~image[y][x];
+		if (is_mask_applicable(y, x, mask_number))
+			img_set(image, max_pixels, y, x, ~img_get(image, max_pixels, y, x));
 
 		y = y + dir;
 		x = x + 1;
@@ -422,8 +436,10 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			x = x - 3;
 			for (int j=0; j < 6; j++) {
 				if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
-				if ((working_byte & 128) > 0) image[y][x] = 0;
-				if (is_mask_applicable(y, x, mask_number)) image[y][x]=~image[y][x];
+				if ((working_byte & 128) > 0)
+					img_set(image, max_pixels, y, x, 0);
+				if (is_mask_applicable(y, x, mask_number))
+					img_set(image, max_pixels, y, x, ~img_get(image, max_pixels, y, x));
 
 				i++;
 				y = y + dir;
@@ -460,8 +476,6 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	printf("INFO: filename=[%s]\n\n", filename);
 
 	//deallocate memory
-	for (int i=0; i < max_pixels; i++)
-		free(image[i]);
 	free(image);
 
 }
