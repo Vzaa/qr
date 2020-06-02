@@ -48,7 +48,6 @@
 #include <string.h>	//for strlen
 #include <stdlib.h>	//for malloc, free
 #include "qr.h"
-#include "png_create.h" //for png_create
 
 //-----------------------------------------------------------------------------------------------------------------
 
@@ -458,7 +457,6 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 	//-----------------------------------
 
-	png_create(max_pixels, max_pixels, image, filename, 4);
 	printf("INFO: filename=[%s]\n\n", filename);
 
 	//deallocate memory
