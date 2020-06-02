@@ -53,6 +53,8 @@
 #define BLACK "\e[40m  "
 #define RESET_NL "\e[49m\n"
 
+#define INFO(...)
+
 typedef enum {
 	TYPE_ANSI,
 	TYPE_UNICODE,
@@ -212,8 +214,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 	unsigned char message[1666] = {0};  // 244 valid up to VERSION 13-Q, 1666 valid up to VERSION 40-Q
 	int16_t message_length = strlen(freetext);
-	printf("INFO: message=[%s]\n", freetext);
-	printf("INFO: len of message=%d\n", message_length);
+	INFO("INFO: message=[%s]\n", freetext);
+	INFO("INFO: len of message=%d\n", message_length);
 	//printArrayBYTE("unencoded input", message_length, (unsigned char*)&freetext[0]);
 
 	int16_t qr_version = -1;
@@ -224,12 +226,12 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 		if (message_length <= capacity) {
 			qr_version = i;
-			printf("INFO: selected QR Version %d\n", qr_version+1);
+			INFO("INFO: selected QR Version %d\n", qr_version+1);
 			break;
 		}
 	}
 	if (qr_version < 0) {
-		printf("ERROR: Unable to find QR version capable of encoding input message.  Sorry, try again.\n");
+		fprintf(stderr, "ERROR: Unable to find QR version capable of encoding input message.  Sorry, try again.\n");
 		return;
 	}
 
@@ -255,7 +257,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			(message_parameters[1] * message_parameters[2])
 			+ (message_parameters[3] * message_parameters[4])
 			- message_index;
-		printf("INFO: needed pad bytes: %d\n", needed_pad_bytes);
+		INFO("INFO: needed pad bytes: %d\n", needed_pad_bytes);
 		for (uint16_t i=0; i < needed_pad_bytes; i++) {
 			message[message_index++] = pad[pad_index];
 			pad_index ^= 1;
@@ -308,26 +310,26 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	int16_t output_size = 
 		(message_parameters[1] * message_parameters[2]) + (message_parameters[3] * message_parameters[4]) // total data codewords
 		+ ((message_parameters[1] + message_parameters[3])) * message_parameters[0]; // total error codewords
-	printf("INFO: total output_size=%d bytes\n", output_size);
+	INFO("INFO: total output_size=%d bytes\n", output_size);
 
 	if (test_vector != 0) {
 		for (int16_t i=0; i < output_size; i++) {
 			if (interleaved_output[i] != test_vector[i]) {
-				printf("\aERROR: TEST FAILED!  Index=%d\n", i);
+				fprintf(stderr, "\aERROR: TEST FAILED!  Index=%d\n", i);
 				printArrayBYTE("output: ", output_size, interleaved_output);
 				return;
 			}
 		}
-		printf("INFO: TEST PASSED!\n");
+		INFO("INFO: TEST PASSED!\n");
 	}
 	//printArrayBYTE("output: ", output_size, interleaved_output);
 
 	int16_t max_pixels = (qr_version*4)+21;
-	printf("INFO: pixel size=%d x %d\n", max_pixels, max_pixels);
+	INFO("INFO: pixel size=%d x %d\n", max_pixels, max_pixels);
 
 	unsigned char *image = malloc(max_pixels * max_pixels); //rows
 	if (image == 0) {
-		printf("\a!!! ERROR !!! Out of memory during first malloc\n");
+		fprintf(stderr, "\a!!! ERROR !!! Out of memory during first malloc\n");
 		return;
 	}
 
@@ -407,7 +409,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	img_set(image, max_pixels, (qr_version * 4) + 13, 8, 0);
 
 	unsigned char mask_number = 1;
-	printf("INFO: using mask %d\n", mask_number);
+	INFO("INFO: using mask %d\n", mask_number);
 
 	//apply mask format info
 	{
@@ -458,7 +460,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	int16_t primary_bits = output_size * 8;
 	int16_t remainder_bits = message_parameters[5];
 
-	printf("INFO: primary bits=%d  remainder bits=%d\n", primary_bits, remainder_bits);
+	INFO("INFO: primary bits=%d  remainder bits=%d\n", primary_bits, remainder_bits);
 
 	unsigned char working_byte = 0;
 	int16_t interleaved_index = -1;
@@ -558,7 +560,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	{
 		FILE *fptr = stdout;
 		if (filename != NULL) {
-			printf("INFO: filename=[%s]\n\n", filename);
+			INFO("INFO: filename=[%s]\n\n", filename);
 			fptr = fopen(filename, "w");
 			if (fptr == NULL) {
 				perror("fopen");
