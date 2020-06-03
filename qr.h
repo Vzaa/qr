@@ -3,7 +3,7 @@
 
 typedef enum {
 	TYPE_ANSI,
-	TYPE_UNICODE,
+	TYPE_UNICODE
 } output_type_e;
 
 void parseMessage(char* filename, const char* freetext, unsigned char test_vector[], output_type_e out_type);

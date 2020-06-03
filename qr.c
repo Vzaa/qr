@@ -49,9 +49,9 @@
 #include <stdlib.h>	//for malloc, free
 #include "qr.h"
 
-#define WHITE "\e[107m  "
-#define BLACK "\e[40m  "
-#define RESET_NL "\e[49m\n"
+#define WHITE "\033[107m  "
+#define BLACK "\033[40m  "
+#define RESET_NL "\033[49m\n"
 
 #define INFO(...)
 
@@ -257,9 +257,10 @@ unsigned char codeword_parameters[40][12] = { // 480 bytes
 };
 
 void printArrayBYTEwithOffset(char* info, uint16_t length, unsigned char data[], unsigned char offset) {
+	uint16_t i;
 	printf("[size=%d] %s", length, info);
 	printf("\n\tBYTE ");
-	for (uint16_t i = 0; i < length; i++) {
+	for (i = 0; i < length; i++) {
 		printf(">%02x", data[i+offset]);
 		if ((i+1) % 32 != 0) printf(",");
 		if ((i+1) % 32 == 0) printf("\n\tBYTE ");
@@ -277,27 +278,28 @@ void printArrayBYTE(char* info, uint16_t length, unsigned char data[]) {
 // it turns out the entire algorithm could be reduced to some relatively simple loops after quite a bit of trial-and-error.
 
 void reedSolomon(int16_t data_codewords, int16_t data_offset, unsigned char message[], int16_t error_codewords, unsigned char errorcode[], unsigned char generator[]) {
-	for (int16_t i=0; i < data_codewords; i++)
+	int16_t i, j;
+	for (i=0; i < data_codewords; i++)
 		errorcode[i] = message[i + data_offset];
 
-	for (int16_t i=data_codewords; i < error_codewords; i++) // if error codewords > data codewords, need to initialize enough zeros for the math
+	for (i=data_codewords; i < error_codewords; i++) // if error codewords > data codewords, need to initialize enough zeros for the math
 		errorcode[i] = 0;
 	//printArrayBYTE("init: ", error_codewords, errorcode);
 
-	for (int16_t j=1; j <= data_codewords; j++) {
+	for (j=1; j <= data_codewords; j++) {
 		int16_t lead_term = a_inv[errorcode[0]];
 		if (errorcode[0] != 0) {
-			for (int16_t i=1; i <= error_codewords; i++) {
+			for (i=1; i <= error_codewords; i++) {
 				unsigned char temp_value = 0;
 				if (i < error_codewords) temp_value = errorcode[i];
 				errorcode[i-1] = temp_value ^ a[(generator[i-1] + lead_term) % 255];
 			}
 		} else { // polynomial division step is greatly simiplified (just a shift of all terms left) if leading coeff. is zero
-			for (int16_t i=1; i <= error_codewords; i++)
+			for (i=1; i <= error_codewords; i++)
 				errorcode[i-1] = errorcode[i];
 		}
 
-		for (int16_t i=error_codewords+1; i <= data_codewords; i++) {
+		for (i=error_codewords+1; i <= data_codewords; i++) {
 			errorcode[i-1] = errorcode[i];
 		}
 		//printArrayBYTE("iter: ", error_codewords, errorcode);
@@ -317,19 +319,20 @@ int is_mask_applicable(int16_t row, int16_t column, unsigned char mask_number) {
 		case 5: return ((((row * column) % 2) + ((row * column) % 3)) == 0);
 		case 6: return ((((row * column) % 2) + ((row * column) % 3)) % 2 == 0);
 		case 7: return ((((row + column) % 2) + ((row * column) % 3)) % 2 == 0);
+		default: break;
 	}
 	return 0;
 }
 
-const char *get_symbol(int a, int b)
+const char *get_symbol(int x, int y)
 {
 	const char *smap[] = { " ", "█", "▄", "▀" };
 
-	if (a && b) {
+	if (x && y) {
 		return smap[1];
-	} else if (a && !b) {
+	} else if (x && !y) {
 		return smap[3];
-	} else if (!a && b) {
+	} else if (!x && y) {
 		return smap[2];
 	} else {
 		return smap[0];
@@ -376,29 +379,30 @@ void print_ansi(unsigned char *image, int16_t max_pixels, FILE *fptr)
 
 void print_ucode(unsigned char *image, int16_t max_pixels, FILE *fptr)
 {
-	for (int j = 0; j < max_pixels + 4; j++) {
+	int16_t i, j;
+	for (j = 0; j < max_pixels + 4; j++) {
 		fprintf(fptr, "%s", get_symbol(1, 1));
 	}
 	fprintf(fptr, "\n");
-	for (int i = 0; i < max_pixels; i += 2) {
+	for (i = 0; i < max_pixels; i += 2) {
 		fprintf(fptr, "%s", get_symbol(1, 1));
 		fprintf(fptr, "%s", get_symbol(1, 1));
-		for (int j = 0; j < max_pixels; j++) {
-			int a = img_get(image, max_pixels, i, j);
-			int b;
+		for (j = 0; j < max_pixels; j++) {
+			int x = img_get(image, max_pixels, i, j);
+			int y;
 			if (i + 1 >= max_pixels) {
-				b = 1;
+				y = 1;
 			} else {
-				b = img_get(image, max_pixels, i + 1, j);
+				y = img_get(image, max_pixels, i + 1, j);
 			}
 
-			fprintf(fptr, "%s", get_symbol(a, b));
+			fprintf(fptr, "%s", get_symbol(x, y));
 		}
 		fprintf(fptr, "%s", get_symbol(1, 1));
 		fprintf(fptr, "%s", get_symbol(1, 1));
 		fprintf(fptr, "\n");
 	}
-	for (int j = 0; j < max_pixels + 4; j++) {
+	for (j = 0; j < max_pixels + 4; j++) {
 		fprintf(fptr, "%s", get_symbol(1, 1));
 	}
 	fprintf(fptr, "\n");
@@ -406,6 +410,7 @@ void print_ucode(unsigned char *image, int16_t max_pixels, FILE *fptr)
 
 void parseMessage(char* filename, const char* freetext, unsigned char test_vector[], output_type_e out_type) {
 
+	int i, j, k, groups, blocks;
 	unsigned char message[1666] = {0};  // 244 valid up to VERSION 13-Q, 1666 valid up to VERSION 40-Q
 	int16_t message_length = strlen(freetext);
 	INFO("INFO: message=[%s]\n", freetext);
@@ -413,7 +418,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	//printArrayBYTE("unencoded input", message_length, (unsigned char*)&freetext[0]);
 
 	int16_t qr_version = -1;
-	for (int16_t i=0; i < 40; i++) {
+	for (i=0; i < 40; i++) {
 		int16_t capacity = codeword_parameters[i][1]*codeword_parameters[i][2] + codeword_parameters[i][3]*codeword_parameters[i][4] - 2;
 		if (i > 8) capacity--; //subtract one extra byte because of switch to 16-bit length byte in QR Version 10+
 		//printf("qr ver=%d  capacity=%d\n", i+1, capacity);
@@ -441,7 +446,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 	message[message_index++] = ((message_length & 15) << 4) | ((freetext[0] & 240) >> 4);
 
-	for (int16_t i=0; i < message_length; i++)		
+	for (i=0; i < message_length; i++)		
 		message[message_index++] = ((freetext[i] & 15) << 4) | ((freetext[i+1] & 240) >> 4);
 
 	{
@@ -452,7 +457,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			+ (message_parameters[3] * message_parameters[4])
 			- message_index;
 		INFO("INFO: needed pad bytes: %d\n", needed_pad_bytes);
-		for (uint16_t i=0; i < needed_pad_bytes; i++) {
+		for (i=0; i < needed_pad_bytes; i++) {
 			message[message_index++] = pad[pad_index];
 			pad_index ^= 1;
 		}
@@ -469,18 +474,18 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 	int16_t message_offset = 0;
 	int16_t block_number = 0;
-	for (int16_t groups=0; groups < 2; groups++) {
+	for (groups=0; groups < 2; groups++) {
 		int16_t num_blocks = message_parameters[groups*2+1];
 		int16_t data_codewords = message_parameters[groups*2+2];
 
-		for (int16_t blocks=0; blocks < num_blocks; blocks++) {
+		for (blocks=0; blocks < num_blocks; blocks++) {
 			reedSolomon(data_codewords, message_offset, message, error_codewords, errorcode, &gen_poly[gen_offset[message_parameters[0]-13]]);
 
 			//printf("REED OUTPUT: data_codewords=%d,  message_offset=%d,  error_codewords=%d,  gen_offset=%d\n", data_codewords, message_offset, error_codewords, gen_offset[message_parameters[0]-13]);
 			//printArrayBYTEwithOffset("Data Codewords: ", data_codewords, message, message_offset);
 			//printArrayBYTE("Error Codewords: ", error_codewords, errorcode);
 			int16_t interleaved_output_offset = block_number;
-			for (int16_t i=0; i < data_codewords; i++) {
+			for (i=0; i < data_codewords; i++) {
 				interleaved_output[interleaved_output_offset] = message[i + message_offset];
 
 				if (i+1 < message_parameters[2]) // { 18, 2, 15, 2, 16}
@@ -490,7 +495,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			}
 
 			interleaved_output_offset = message_parameters[1] * message_parameters[2] + message_parameters[3] * message_parameters[4] + block_number;
-			for (int16_t i=0; i < error_codewords; i++) {
+			for (i=0; i < error_codewords; i++) {
 				interleaved_output[interleaved_output_offset] = errorcode[i];
 				interleaved_output_offset += total_blocks;
 			}
@@ -507,7 +512,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	INFO("INFO: total output_size=%d bytes\n", output_size);
 
 	if (test_vector != 0) {
-		for (int16_t i=0; i < output_size; i++) {
+		for (i=0; i < output_size; i++) {
 			if (interleaved_output[i] != test_vector[i]) {
 				fprintf(stderr, "\aERROR: TEST FAILED!  Index=%d\n", i);
 				printArrayBYTE("output: ", output_size, interleaved_output);
@@ -527,15 +532,15 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		return;
 	}
 
-	for (int16_t i = 0; i < max_pixels; i++) {
-		for (int16_t j = 0; j < max_pixels; j++) {
+	for (i = 0; i < max_pixels; i++) {
+		for (j = 0; j < max_pixels; j++) {
 			img_set(image, max_pixels, i, j, 255); // set all pixels to white
 		}
 	}
 
 	// add the three finder pattern modules to the qr code
 	int16_t finder_pattern = (qr_version*4)+14;
-	for (int16_t i = 0; i < 7; i++) {
+	for (i = 0; i < 7; i++) {
 		img_set(image, max_pixels, 0, i, 0); //top left module
 		img_set(image, max_pixels, 6, i, 0);
 		img_set(image, max_pixels, 0, finder_pattern + i, 0); //top right module
@@ -543,7 +548,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		img_set(image, max_pixels, finder_pattern, i, 0); //bottom left module
 		img_set(image, max_pixels, max_pixels - 1, i, 0);
 	}
-	for (int16_t i = 1; i < 6; i++) {
+	for (i = 1; i < 6; i++) {
 		img_set(image, max_pixels, i, 0, 0); //top left module
 		img_set(image, max_pixels, i, 6, 0);
 		img_set(image, max_pixels, i, finder_pattern, 0); //top right module
@@ -551,8 +556,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		img_set(image, max_pixels, finder_pattern + i, 0, 0); //bottom left module
 		img_set(image, max_pixels, finder_pattern + i, 6, 0);
 	}
-	for (int16_t i = 2; i < 5; i++) {
-		for (int16_t j = 0; j < 3; j++) {
+	for (i = 2; i < 5; i++) {
+		for (j = 0; j < 3; j++) {
 			img_set(image, max_pixels, 2 + j, i, 0);
 			img_set(image, max_pixels, 2 + j, i + finder_pattern, 0);
 			img_set(image, max_pixels, finder_pattern + 2 + j, i, 0);
@@ -563,22 +568,22 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	if (qr_version > 0) { // no pattern for QR Version 1 (our qr_verison == 0)
 		unsigned char center[7] = {0};
 		center[0] = 6;
-		for (int16_t i=1; i < 7; i++)
+		for (i=1; i < 7; i++)
 			center[i] = message_parameters[5+i];
 
-		for (int16_t i=0; i < 7; i++) {
-			for (int16_t j=0; j < 7; j++) {
+		for (i=0; i < 7; i++) {
+			for (j=0; j < 7; j++) {
 				if ((center[i] != 0) && (center[j] != 0)) {
 					//printf("coord=(%d,%d)\n", center[i], center[j]);
 					if (img_get(image, max_pixels, center[i], center[j]) == 255) { //only add if bit is currently white
 						img_set(image, max_pixels, center[i], center[j], 0);
-						for (int16_t k = 0; k < 5; k++) {
+						for (k = 0; k < 5; k++) {
 							img_set(image, max_pixels, center[i] - 2,
 								center[j] - 2 + k, 0);
 							img_set(image, max_pixels, center[i] + 2,
 								center[j] - 2 + k, 0);
 						}
-						for (int16_t k = 0; k < 3; k++) {
+						for (k = 0; k < 3; k++) {
 							img_set(image, max_pixels,
 								center[i] - 1 + k, center[j] - 2,
 								0);
@@ -594,7 +599,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 
 	//adding timing patterns
-	for (int16_t i = 8; i < max_pixels - 8; i += 2) {
+	for (i = 8; i < max_pixels - 8; i += 2) {
 		img_set(image, max_pixels, 6, i, 0);
 		img_set(image, max_pixels, i, 6, 0);
 	}
@@ -609,7 +614,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	{
 		int16_t mask = mask_info[mask_number];
 		int16_t skip = 0;
-		for (int16_t i=0; i < 8; i++) {
+		for (i=0; i < 8; i++) {
 			if (i == 6) skip=1;
 			if ((mask & 1) > 0) {
 				img_set(image, max_pixels, 8, max_pixels - i - 1, 0);
@@ -619,7 +624,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		}
 
 		skip = 0;
-		for (int16_t i=0; i < 7; i++) {
+		for (i=0; i < 7; i++) {
 			if (i == 1) skip= -1;
 			if ((mask & 1) > 0) {
 				img_set(image, max_pixels, max_pixels - 7 + i, 8, 0);
@@ -632,10 +637,10 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	//apply version info (for QR Versions 7+)
 	if (qr_version > 5) { //remember qr_version==6 is really V7
 		int16_t offset = (qr_version-6)*3;
-		for (int i=0; i < 3; i++) {
+		for (i=0; i < 3; i++) {
 			unsigned char ver = version_info[offset+i];
-			for (int j=0; j < 2; j++) {
-				for (int k=0; k < 3; k++) {
+			for (j=0; j < 2; j++) {
+				for (k=0; k < 3; k++) {
 					if ((ver & 1) > 0) {
 						img_set(image, max_pixels, 0 + j + (i * 2), max_pixels - 11 + k, 0);
 						img_set(image, max_pixels, max_pixels - 11 + k, 0 + j + (i * 2), 0);
@@ -659,14 +664,14 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	unsigned char working_byte = 0;
 	int16_t interleaved_index = -1;
 
-	for (int i=0; i < primary_bits + remainder_bits; i++) {
+	for (i=0; i < primary_bits + remainder_bits; i++) {
 
 		if (img_get(image, max_pixels, y, x) == 0) { // check for alignment marker hit
 			if (img_get(image, max_pixels, y, x - 1) == 0) //hit alignment marker head=-on, skip over it
 				y = y + dir*5;
 			else {  // hit left-hand edge of alignment marker, handle special case
 				x = x - 1;
-				for (int j=0; j < 5; j++) {
+				for (j=0; j < 5; j++) {
 					if (y != 6) { //skip over horitzonal timing line
 						if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
 						if ((working_byte & 128) > 0)
@@ -712,7 +717,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			dir = +1;
 			y = 0;
 			x = x - 3;
-			for (int j=0; j < 6; j++) {
+			for (j=0; j < 6; j++) {
 				if (i % 8 == 0) { working_byte = interleaved_output[++interleaved_index]; } else { working_byte = working_byte << 1; }
 				if ((working_byte & 128) > 0)
 					img_set(image, max_pixels, y, x, 0);
@@ -767,6 +772,8 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			break;
 		case TYPE_UNICODE:
 			print_ucode(image, max_pixels, fptr);
+			break;
+		default:
 			break;
 		}
 		if (fptr && filename) {
