@@ -49,7 +49,7 @@
 #include <stdlib.h>	//for malloc, free
 #include "qr.h"
 
-#define WHITE "\033[107m  "
+#define WHITE "\033[47m  "
 #define BLACK "\033[40m  "
 #define RESET_NL "\033[49m\n"
 
