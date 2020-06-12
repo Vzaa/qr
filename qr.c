@@ -409,15 +409,37 @@ void print_ucode(unsigned char *image, int16_t max_pixels, FILE *fptr)
 }
 
 void parseMessage(char* filename, const char* freetext, unsigned char test_vector[], output_type_e out_type) {
+	int16_t y;
+	int16_t x;
+	int16_t dir;
 
+	int16_t primary_bits;
+	int16_t remainder_bits;
+
+	unsigned char working_byte = 0;
+	int16_t interleaved_index = -1;
+
+	unsigned char mask_number = 1;
+	int16_t output_size;
+	int16_t error_codewords;
+	int16_t message_offset = 0;
+	int16_t block_number = 0;
+	unsigned char interleaved_output[3706] = {0}; // 532 valid up to VERSION 13-Q; 3706 valid up to VERSION 40-Q
+	int16_t total_blocks;
+	unsigned char errorcode[30] = {0}; // 30 is highest EC count for Q-quality; 25 is highest dataword count for Q-quality
+	unsigned char* message_parameters;
 	int i, j, k, groups, blocks;
 	unsigned char message[1666] = {0};  // 244 valid up to VERSION 13-Q, 1666 valid up to VERSION 40-Q
 	int16_t message_length = strlen(freetext);
+	unsigned char *image; //rows
+	int16_t max_pixels;
+	int16_t finder_pattern;
+	int16_t qr_version = -1;
+	int message_index = 0;
 	INFO("INFO: message=[%s]\n", freetext);
 	INFO("INFO: len of message=%d\n", message_length);
 	//printArrayBYTE("unencoded input", message_length, (unsigned char*)&freetext[0]);
 
-	int16_t qr_version = -1;
 	for (i=0; i < 40; i++) {
 		int16_t capacity = codeword_parameters[i][1]*codeword_parameters[i][2] + codeword_parameters[i][3]*codeword_parameters[i][4] - 2;
 		if (i > 8) capacity--; //subtract one extra byte because of switch to 16-bit length byte in QR Version 10+
@@ -434,8 +456,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		return;
 	}
 
-	unsigned char* message_parameters = codeword_parameters[qr_version];
-	int message_index = 0;
+	message_parameters = codeword_parameters[qr_version];
 
 	message[message_index] = 64; // "0100" Byte Encoding
 	if (qr_version > 8) { // QR Verisons 10+ for Byte data encoding represent length as 16-bits
@@ -465,26 +486,21 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 
 	//printArrayBYTE("encoded input (with padding)", message_index, message);
 
-	int16_t error_codewords = message_parameters[0];
+	error_codewords = message_parameters[0];
 
-	unsigned char errorcode[30] = {0}; // 30 is highest EC count for Q-quality; 25 is highest dataword count for Q-quality
 
-	int16_t total_blocks = message_parameters[1] + message_parameters[3];
-	unsigned char interleaved_output[3706] = {0}; // 532 valid up to VERSION 13-Q; 3706 valid up to VERSION 40-Q
-
-	int16_t message_offset = 0;
-	int16_t block_number = 0;
+	total_blocks = message_parameters[1] + message_parameters[3];
 	for (groups=0; groups < 2; groups++) {
 		int16_t num_blocks = message_parameters[groups*2+1];
 		int16_t data_codewords = message_parameters[groups*2+2];
 
 		for (blocks=0; blocks < num_blocks; blocks++) {
+			int16_t interleaved_output_offset = block_number;
 			reedSolomon(data_codewords, message_offset, message, error_codewords, errorcode, &gen_poly[gen_offset[message_parameters[0]-13]]);
 
 			//printf("REED OUTPUT: data_codewords=%d,  message_offset=%d,  error_codewords=%d,  gen_offset=%d\n", data_codewords, message_offset, error_codewords, gen_offset[message_parameters[0]-13]);
 			//printArrayBYTEwithOffset("Data Codewords: ", data_codewords, message, message_offset);
 			//printArrayBYTE("Error Codewords: ", error_codewords, errorcode);
-			int16_t interleaved_output_offset = block_number;
 			for (i=0; i < data_codewords; i++) {
 				interleaved_output[interleaved_output_offset] = message[i + message_offset];
 
@@ -506,7 +522,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		//printArrayBYTE("output: ", 346, interleaved_output);
 	}
 
-	int16_t output_size = 
+	output_size = 
 		(message_parameters[1] * message_parameters[2]) + (message_parameters[3] * message_parameters[4]) // total data codewords
 		+ ((message_parameters[1] + message_parameters[3])) * message_parameters[0]; // total error codewords
 	INFO("INFO: total output_size=%d bytes\n", output_size);
@@ -515,7 +531,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 		for (i=0; i < output_size; i++) {
 			if (interleaved_output[i] != test_vector[i]) {
 				fprintf(stderr, "\aERROR: TEST FAILED!  Index=%d\n", i);
-				printArrayBYTE("output: ", output_size, interleaved_output);
+				/*printArrayBYTE("output: ", output_size, interleaved_output);*/
 				return;
 			}
 		}
@@ -523,10 +539,10 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 	//printArrayBYTE("output: ", output_size, interleaved_output);
 
-	int16_t max_pixels = (qr_version*4)+21;
+	max_pixels = (qr_version*4)+21;
 	INFO("INFO: pixel size=%d x %d\n", max_pixels, max_pixels);
 
-	unsigned char *image = malloc(max_pixels * max_pixels); //rows
+	image = malloc(max_pixels * max_pixels); //rows
 	if (image == 0) {
 		fprintf(stderr, "\a!!! ERROR !!! Out of memory during first malloc\n");
 		return;
@@ -539,7 +555,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 
 	// add the three finder pattern modules to the qr code
-	int16_t finder_pattern = (qr_version*4)+14;
+	finder_pattern = (qr_version*4)+14;
 	for (i = 0; i < 7; i++) {
 		img_set(image, max_pixels, 0, i, 0); //top left module
 		img_set(image, max_pixels, 6, i, 0);
@@ -607,7 +623,6 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	//add the "dark module"
 	img_set(image, max_pixels, (qr_version * 4) + 13, 8, 0);
 
-	unsigned char mask_number = 1;
 	INFO("INFO: using mask %d\n", mask_number);
 
 	//apply mask format info
@@ -652,17 +667,17 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 	}
 
 	//data fill
-	int16_t y = max_pixels-1;
-	int16_t x = max_pixels-1;
-	int16_t dir = -1;
+	y = max_pixels-1;
+	x = max_pixels-1;
+	dir = -1;
 
-	int16_t primary_bits = output_size * 8;
-	int16_t remainder_bits = message_parameters[5];
+	primary_bits = output_size * 8;
+	remainder_bits = message_parameters[5];
+
+	working_byte = 0;
+	interleaved_index = -1;
 
 	INFO("INFO: primary bits=%d  remainder bits=%d\n", primary_bits, remainder_bits);
-
-	unsigned char working_byte = 0;
-	int16_t interleaved_index = -1;
 
 	for (i=0; i < primary_bits + remainder_bits; i++) {
 
@@ -763,6 +778,7 @@ void parseMessage(char* filename, const char* freetext, unsigned char test_vecto
 			fptr = fopen(filename, "w");
 			if (fptr == NULL) {
 				perror("fopen");
+				free(image);
 				return;
 			}
 		}
